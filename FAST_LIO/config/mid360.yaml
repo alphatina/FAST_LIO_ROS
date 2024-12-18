@@ -1,16 +1,15 @@
 common:
-  lidar_topic:  "/livox/lidar_192_168_30_201"
-  lidar_topic2: "/livox/lidar_192_168_30_202"
-  imu_topic:  "/livox/imu_192_168_30_201"
+  lidar_topic:  "/uav_160/livox/lidar"
+  imu_topic:  "/uav_160/livox/imu"
   IMU_INIT_COUNT: 200
 
 preprocess:
-  lidar_type: 2  
+  lidar_type: 2              
   scan_line: 4
   blind: 0.3
 
 mapping:
-  acc_cov: 0.0004
+  acc_cov: 0.001
   gyr_cov: 0.0001
   b_acc_cov: 0.0001
   b_gyr_cov: 0.0001
@@ -21,14 +20,10 @@ mapping:
   extrinsic_R: [1, 0, 0,  # 从LiDAR坐标系旋转到IMU坐标系的旋转矩阵
                 0, 1, 0,
                 0, 0, 1]
-  # lidar2base_T: [-0.245, 0.000, 0.153] # 后置Lidar在载体中心坐标系中的位置
-  # lidar2base_R: [-0.8660254,  0.0,  -0.5,  # 从后置LiDAR坐标系旋转到载体中心坐标系的旋转矩阵
-  #                 0.0,       -1.0,   0.0,
-  #                -0.5,        0.0,   0.8660254]
-  lidar2base_T: [0.468, 0.0, 0.192] # front Lidar在载体中心坐标系中的位置
-  lidar2base_R: [0.8660254,  0.0,  0.5,  # 从front LiDAR坐标系旋转到载体中心坐标系的旋转矩阵
-                 0.0,        1.0,  0.0,
-                -0.5,        0.0,  0.8660254]
+  lidar2base_T: [0, 0, 0.205] # LiDAR在base系中的三维坐标
+  lidar2base_R: [1,  0,  0,  # 从LiDAR坐标系旋转到base坐标系的旋转矩阵
+                 0,  -1,  0,
+                 0,  0,  -1]
 
 
 publish:

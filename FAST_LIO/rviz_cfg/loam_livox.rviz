@@ -44,10 +44,10 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.3
-      Cell Size: 0.2
+      Cell Size: 1
       Class: rviz/Grid
       Color: 160; 160; 164
-      Enabled: false
+      Enabled: true
       Line Style:
         Line Width: 1
         Value: Lines
@@ -62,7 +62,7 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: false
     - Class: rviz/Axes
-      Enabled: true
+      Enabled: false
       Length: 0.7
       Name: Axes
       Radius: 0.06
@@ -81,19 +81,19 @@ Visualization Manager:
           Class: rviz/PointCloud2
           Color: 238; 238; 236
           Color Transformer: FlatColor
-          Decay Time: 100
-          Enabled: false
+          Decay Time: 0
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 238; 238; 236
-          Name: currentPoints_ugv
+          Name: surround
           Position Transformer: XYZ
-          Queue Size: 100
+          Queue Size: 1
           Selectable: false
-          Size (Pixels): 1
+          Size (Pixels): 3
           Size (m): 0.05
           Style: Points
-          Topic: /cloud_registered
+          Topic: /uav_160/cloud_registered
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
@@ -109,19 +109,19 @@ Visualization Manager:
           Class: rviz/PointCloud2
           Color: 255; 255; 255
           Color Transformer: AxisColor
-          Decay Time: 100
+          Decay Time: 1000
           Enabled: true
           Invert Rainbow: true
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
-          Name: surround_ugv
+          Name: currPoints
           Position Transformer: XYZ
           Queue Size: 1000
           Selectable: true
           Size (Pixels): 1
           Size (m): 0.01
           Style: Points
-          Topic: /cloud_registered
+          Topic: /uav_160/cloud_registered
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
@@ -135,53 +135,25 @@ Visualization Manager:
           Axis: Z
           Channel Name: intensity
           Class: rviz/PointCloud2
-          Color: 38; 38; 236
-          Color Transformer: FlatColor
-          Decay Time: 100
+          Color: 255; 0; 0
+          Color Transformer: AxisColor
+          Decay Time: 0
           Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
-          Min Color: 238; 238; 236
-          Name: currentPoints_uav
-          Position Transformer: XYZ
-          Queue Size: 100
-          Selectable: false
-          Size (Pixels): 1
-          Size (m): 0.05
-          Style: Points
-          Topic: /uav_160/cloud_registered
-          Unreliable: false
-          Use Fixed Frame: true
-          Use rainbow: true
-          Value: true
-        - Alpha: 0.5
-          Autocompute Intensity Bounds: true
-          Autocompute Value Bounds:
-            Max Value: 6
-            Min Value: -1
-            Value: false
-          Axis: Z
-          Channel Name: intensity
-          Class: rviz/PointCloud2
-          Color: 255; 255; 255
-          Color Transformer: AxisColor
-          Decay Time: 100
-          Enabled: true
-          Invert Rainbow: true
-          Max Color: 255; 255; 255
           Min Color: 0; 0; 0
-          Name: surround_uav
+          Name: PointCloud2
           Position Transformer: XYZ
-          Queue Size: 1000
+          Queue Size: 10
           Selectable: true
-          Size (Pixels): 1
-          Size (m): 0.01
-          Style: Points
-          Topic: /uav_160/cloud_registered
+          Size (Pixels): 3
+          Size (m): 0.10
+          Style: Flat Squares
+          Topic: /uav_160/Laser_map
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
       Enabled: true
       Name: mapping
     - Class: rviz/Group
@@ -217,7 +189,7 @@ Visualization Manager:
             Shaft Length: 0.05
             Shaft Radius: 0.05
             Value: Axes
-          Topic: /Odometry
+          Topic: /uav_160/odometry/out
           Unreliable: false
           Value: true
       Enabled: true
@@ -249,7 +221,7 @@ Visualization Manager:
       Radius: 0.03
       Shaft Diameter: 0.4
       Shaft Length: 0.4
-      Topic: /path
+      Topic: /uav_160/path
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -277,7 +249,7 @@ Visualization Manager:
       Size (Pixels): 4
       Size (m): 0.3
       Style: Spheres
-      Topic: /cloud_effected
+      Topic: /uav_160/cloud_effected
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -305,7 +277,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.1
       Style: Flat Squares
-      Topic: /Laser_map
+      Topic: /uav_160/Laser_map
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true

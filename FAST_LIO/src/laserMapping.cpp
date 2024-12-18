@@ -55,13 +55,11 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
 #include <geometry_msgs/Vector3.h>
 #include <livox_ros_driver2/CustomMsg.h>
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
 
 
 #define INIT_TIME           (0.1)
@@ -87,7 +85,7 @@ mutex mtx_buffer;
 condition_variable cv_buffer;
 
 string root_dir = ROOT_DIR;
-string map_file_path, lidar_topic, lidar_topic2, imu_topic;
+string map_file_path, lidar_topic, imu_topic;
 
 double res_mean_last = 0.05, total_residual = 0.0;
 double last_timestamp_lidar = 0, last_timestamp_imu = -1.0;
@@ -143,8 +141,10 @@ state_ikfom state_point;
 vect3 pos_lidar;
 V3D pos_imu_in_base;
 V3D pos_base, vel_base;
+V3D rot_angle_degree;
 M3D rot_imu_wrt_base;
 M3D rot_base;
+tf::Transform tf_uav_origin;
 
 nav_msgs::Path path;
 nav_msgs::Odometry odomAftMapped;
@@ -164,9 +164,9 @@ void SigHandle(int sig)
 inline void dump_lio_state_to_log(FILE *fp_state)  
 {
   fprintf(fp_state, "%.3f ", Measures.lidar_beg_time - first_lidar_time);
-  fprintf(fp_state, "%.3f %.3f %.3f %.3f ", geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w);  // Angle
+  fprintf(fp_state, "%.3f %.3f %.3f ", rot_angle_degree(2), rot_angle_degree(1), rot_angle_degree(0));  // Angle
   fprintf(fp_state, "%.3f %.3f %.3f ", pos_base(0), pos_base(1), pos_base(2)); // Pos  
-  fprintf(fp_state, "%.3f %.3f %.3f ", vel_base(0), vel_base(1), vel_base(2)); // Vel  
+  fprintf(fp_state, "%.3f %.3f %.3f ", state_point.vel(0), state_point.vel(1), state_point.vel(2)); // Vel  
   fprintf(fp_state, "%lf %lf %lf ", state_point.bg(0), state_point.bg(1), state_point.bg(2));    // Bias_g  
   fprintf(fp_state, "%lf %lf %lf ", state_point.ba(0), state_point.ba(1), state_point.ba(2));    // Bias_a  
   fprintf(fp_state, "%lf %lf %lf", state_point.grav[0], state_point.grav[1], state_point.grav[2]); // Bias_a  
@@ -329,25 +329,6 @@ void livox_pcl_cbk(const livox_ros_driver2::CustomMsg::ConstPtr &msg)
   cv_buffer.notify_one();
 }
 
-void livox_pcl_cbk2(const livox_ros_driver2::CustomMsg::ConstPtr &msg1, const livox_ros_driver2::CustomMsg::ConstPtr &msg2) 
-{
-  // double preprocess_start_time = omp_get_wtime();
-  p_pre->time_diff_lidar12 = msg1->header.stamp.toSec() - msg2->header.stamp.toSec();
-  if (p_pre->time_diff_lidar12 > 0) {
-    last_timestamp_lidar = msg2->header.stamp.toSec();
-  } else {
-    last_timestamp_lidar = msg1->header.stamp.toSec();
-  }
-  
-  PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
-  p_pre->process2(msg1, msg2, ptr);
-
-  std::lock_guard<std::mutex> lock(mtx_buffer);
-  lidar_buffer.push_back(ptr);
-  time_buffer.push_back(last_timestamp_lidar);
-  cv_buffer.notify_one();
-}
-
 void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in) 
 {
   // sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
@@ -494,7 +475,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
     sensor_msgs::PointCloud2 laserCloudmsg;
     pcl::toROSMsg(*laserCloudWorld, laserCloudmsg);
     laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
-    laserCloudmsg.header.frame_id = "map";
+    laserCloudmsg.header.frame_id = "origin_uav";
     pubLaserCloudFull.publish(laserCloudmsg);
   }
 
@@ -527,7 +508,7 @@ void publish_frame_body(const ros::Publisher & pubLaserCloudFull_body)
   sensor_msgs::PointCloud2 laserCloudmsg;
   pcl::toROSMsg(*laserCloudIMUBody, laserCloudmsg);
   laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
-  laserCloudmsg.header.frame_id = "baselink_ugv";
+  laserCloudmsg.header.frame_id = "baselink_uav";
   pubLaserCloudFull_body.publish(laserCloudmsg);
 }
 
@@ -544,7 +525,7 @@ void publish_effect_world(const ros::Publisher & pubLaserCloudEffect)
   sensor_msgs::PointCloud2 laserCloudFullRes3;
   pcl::toROSMsg(*laserCloudWorld, laserCloudFullRes3);
   laserCloudFullRes3.header.stamp = ros::Time().fromSec(lidar_end_time);
-  laserCloudFullRes3.header.frame_id = "map";
+  laserCloudFullRes3.header.frame_id = "origin_uav";
   pubLaserCloudEffect.publish(laserCloudFullRes3);
 }
 
@@ -553,7 +534,7 @@ void publish_map(const ros::Publisher & pubLaserCloudMap)
   sensor_msgs::PointCloud2 laserCloudMap;
   pcl::toROSMsg(*featsFromMap, laserCloudMap);
   laserCloudMap.header.stamp = ros::Time().fromSec(lidar_end_time);
-  laserCloudMap.header.frame_id = "map";
+  laserCloudMap.header.frame_id = "origin_uav";
   pubLaserCloudMap.publish(laserCloudMap);
 }
 
@@ -574,15 +555,17 @@ void set_posestamp(T & out)
 
 void publish_odometry(const ros::Publisher & pubOdomAftMapped)
 {
-  odomAftMapped.header.frame_id = "map";
-  odomAftMapped.child_frame_id = "baselink_ugv";
-  odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);
+  odomAftMapped.header.frame_id = "origin_uav";
+  odomAftMapped.child_frame_id = "baselink_uav";
+  odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);// ros::Time().fromSec(lidar_end_time);
   set_posestamp(odomAftMapped.pose);
   // add vel to odom
   odomAftMapped.twist.twist.linear.x = vel_base(0);
   odomAftMapped.twist.twist.linear.y = vel_base(1);
   odomAftMapped.twist.twist.linear.z = vel_base(2);
   pubOdomAftMapped.publish(odomAftMapped);
+
+  // broadcast tf
   auto P = kf.get_P();
   for (int i = 0; i < 6; i ++)
   {
@@ -594,7 +577,6 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
     odomAftMapped.pose.covariance[i*6 + 4] = P(k, 1);
     odomAftMapped.pose.covariance[i*6 + 5] = P(k, 2);
   }
-
   static tf::TransformBroadcaster br;
   tf::Transform                   transform;
   tf::Quaternion                  q;
@@ -606,14 +588,15 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
   q.setY(odomAftMapped.pose.pose.orientation.y);
   q.setZ(odomAftMapped.pose.pose.orientation.z);
   transform.setRotation( q );
-  br.sendTransform( tf::StampedTransform( transform, odomAftMapped.header.stamp, "map", "baselink_ugv" ) );
+  br.sendTransform( tf::StampedTransform( transform, odomAftMapped.header.stamp, "origin_uav", "baselink_uav" ) );
+  br.sendTransform( tf::StampedTransform( tf_uav_origin, odomAftMapped.header.stamp, "map", "origin_uav" ) );
 }
 
 void publish_path(const ros::Publisher pubPath)
 {
   set_posestamp(msg_body_pose);
   msg_body_pose.header.stamp = ros::Time().fromSec(lidar_end_time);
-  msg_body_pose.header.frame_id = "map";
+  msg_body_pose.header.frame_id = "origin_uav";
 
   /*** if path is too large, the rvis will crash ***/
   static int jjj = 0;
@@ -755,7 +738,6 @@ int main(int argc, char** argv)
     nh.param<int>("max_iteration",NUM_MAX_ITERATIONS,4);
     nh.param<string>("map_file_path",map_file_path,"");
     nh.param<string>("common/lidar_topic",lidar_topic,"/livox/lidar");
-    nh.param<string>("common/lidar_topic2",lidar_topic2,"/livox/lidar2");
     nh.param<string>("common/imu_topic", imu_topic,"/livox/imu");
     nh.param<int>("common/IMU_INIT_COUNT", p_imu->IMU_INIT_COUNT, 100);
     nh.param<double>("filter_size_corner",filter_size_corner_min,0.5);
@@ -810,7 +792,7 @@ int main(int argc, char** argv)
     p_pre->blind2 = p_pre->blind * p_pre->blind;
     p_pre->det_range2 = p_pre->det_range * p_pre->det_range;
     path.header.stamp = ros::Time::now();
-    path.header.frame_id = "map";
+    path.header.frame_id = "origin_uav";
     
     /*** variables definition ***/
     int frame_num = 0;
@@ -828,10 +810,11 @@ int main(int argc, char** argv)
     memset(point_selected_surf, true, sizeof(point_selected_surf));
     memset(res_last, -1000.0f, sizeof(res_last));
 
-    Lidar_T_wrt_IMU<<VEC_FROM_ARRAY(extrinT);
+        Lidar_T_wrt_IMU<<VEC_FROM_ARRAY(extrinT);
     Lidar_R_wrt_IMU<<MAT_FROM_ARRAY(extrinR);
-    Lidar_T_wrt_base<<VEC_FROM_ARRAY(lidar2baseT);
-    IMU_R_wrt_base<<MAT_FROM_ARRAY(lidar2baseR);
+    Lidar_T_wrt_base<<VEC_FROM_ARRAY(lidar2baseT); 
+    IMU_R_wrt_base<<MAT_FROM_ARRAY(lidar2baseR); 
+    
     base_R_wrt_IMU = IMU_R_wrt_base.transpose();
     IMU_T_wrt_base = Lidar_T_wrt_base - IMU_R_wrt_base * Lidar_T_wrt_IMU;
     base_T_wrt_IMU = Lidar_T_wrt_IMU - base_R_wrt_IMU * Lidar_T_wrt_base;
@@ -849,6 +832,35 @@ int main(int argc, char** argv)
     fill(epsi, epsi+23, 0.001);
     kf.init_dyn_share(get_f, df_dx, df_dw, h_share_model, NUM_MAX_ITERATIONS, epsi);
 
+
+    tf::TransformListener tf_listener;
+    tf::Vector3 pos_uav_origin(0, 0, 0);
+    tf::Quaternion q_uav_origin(0, 0, 0, 1);
+    double tf_cnt = 0;
+    // 监听10次TF变换并累加
+    for (int i = 0; i < 10; ++i) {
+      try {
+        tf::StampedTransform transform;
+        tf_listener.waitForTransform("map", "baselink_ugv", ros::Time(0), ros::Duration(0.05));
+        tf_listener.lookupTransform("map", "baselink_ugv", ros::Time(0), transform);
+        tf_cnt += 1.0;
+        pos_uav_origin += transform.getOrigin();
+        q_uav_origin = tf::slerp(q_uav_origin, transform.getRotation(), 1.0 / tf_cnt); // 球形插值
+      } catch (tf::TransformException ex) {
+        // ROS_ERROR("%s", ex.what());
+      }
+    }
+
+    // tf::Vector3 Lidar_T_wrt_base_tf(Lidar_T_wrt_base.x(), Lidar_T_wrt_base.y(), Lidar_T_wrt_base.z());
+    // tf::Transform transform_to_origin(q_uav_origin, tf::Vector3(0, 0, 0));
+    // Lidar_T_wrt_base_tf = transform_to_origin * Lidar_T_wrt_base_tf;
+    pos_uav_origin = pos_uav_origin / tf_cnt; /// transform_to_origin * Lidar_T_wrt_base_tf;
+    tf_uav_origin.setOrigin(pos_uav_origin);
+    tf_uav_origin.setRotation(q_uav_origin);
+
+    // 输出均值
+    std::cout << endl << (int)tf_cnt << " times average" << endl << "pos: " << pos_uav_origin.x() << ", " << pos_uav_origin.y() << ", " << pos_uav_origin.z() << " m, q: " << q_uav_origin.x()<< ", " << q_uav_origin.y() << ", " << q_uav_origin.z() << ", " << q_uav_origin.w() << endl;
+
     /*** debug record ***/
     // FILE *fp_state;
     // string pos_log_dir = root_dir + "/Log/pos_log.txt";
@@ -858,27 +870,23 @@ int main(int argc, char** argv)
 
     /*** ROS subscribe initialization ***/
     
-    // ros::Subscriber sub_pcl = p_pre->lidar_type < 3 ? nh.subscribe(lidar_topic, 10, livox_pcl_cbk) : nh.subscribe(lidar_topic, 10, standard_pcl_cbk);
-
-    message_filters::Subscriber<livox_ros_driver2::CustomMsg> lidar_sub1(nh, lidar_topic, 10);
-    message_filters::Subscriber<livox_ros_driver2::CustomMsg> lidar_sub2(nh, lidar_topic2, 10);
-    typedef message_filters::sync_policies::ApproximateTime<livox_ros_driver2::CustomMsg, livox_ros_driver2::CustomMsg> MySyncPolicy;
-    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), lidar_sub1, lidar_sub2);
-    sync.registerCallback(boost::bind(&livox_pcl_cbk2, _1, _2));
-
+    ros::Subscriber sub_pcl = p_pre->lidar_type < 3 ? nh.subscribe(lidar_topic, 10, livox_pcl_cbk) : nh.subscribe(lidar_topic, 10, standard_pcl_cbk);
     ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200, imu_cbk);
+
     ros::Publisher pubLaserCloudFull = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_registered", 10);
+            ("/uav_160/cloud_registered", 10);
     ros::Publisher pubLaserCloudFull_body = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_registered_body", 10);
+            ("/uav_160/cloud_registered_body", 10);
     ros::Publisher pubLaserCloudEffect = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_effected", 10);
+            ("/uav_160/cloud_effected", 10);
     ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>
-            ("/Laser_map", 10);
+            ("/uav_160/Laser_map", 10);
     ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry> 
-            ("/Odometry", 10);
+            ("/uav_160/odometry/out", 10);
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
-            ("/path", 10);
+            ("/uav_160/path", 10);
+
+
 //------------------------------------------------------------------------------------------------------
     signal(SIGINT, SigHandle);
     ros::Rate rate(5000);
@@ -984,6 +992,7 @@ int main(int argc, char** argv)
         pos_base = rot_imu_wrt_base * base_T_wrt_IMU + pos_imu_in_base;
         vel_base = IMU_R_wrt_base * state_point.vel;
         rot_base = rot_imu_wrt_base * base_R_wrt_IMU;
+        rot_angle_degree = rot_base.eulerAngles(2,1,0)*180/M_PI;
         Eigen::Quaterniond rot_base_q(rot_base);
         geoQuat.x = rot_base_q.x();
         geoQuat.y = rot_base_q.y();

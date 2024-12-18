@@ -105,7 +105,6 @@ class Preprocess
   ~Preprocess();
   
   void process(const livox_ros_driver2::CustomMsg::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
-  void process2(const livox_ros_driver2::CustomMsg::ConstPtr &msg1, const livox_ros_driver2::CustomMsg::ConstPtr &msg2, PointCloudXYZI::Ptr &pcl_out);
   void process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
   void set(bool feat_en, int lid_type, double bld, int pfilt_num);
 

@@ -12,10 +12,11 @@
 	<param name="filter_size_map" type="double" value="0.25" />
 	<param name="cube_side_length" type="double" value="500" />
 	<param name="runtime_pos_log_enable" type="bool" value="1" />
-    <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+  <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping_uav" output="screen" >
+	</node> 
 
-	<group if="$(arg rviz)">
-	<node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz_ugv" args="-d $(find fast_lio)/rviz_cfg/loam_livox.rviz" />
-	</group>
+	<!-- <group if="$(arg rviz)">
+	<node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz_plane" args="-d $(find fast_lio)/rviz_cfg/loam_livox.rviz" />
+	</group> -->
 
 </launch>
