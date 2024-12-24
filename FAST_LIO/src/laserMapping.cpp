@@ -86,8 +86,7 @@ const float MOV_THRESHOLD = 1.5f;
 mutex mtx_buffer;
 condition_variable cv_buffer;
 
-string root_dir = ROOT_DIR;
-string map_file_path, lidar_topic, lidar_topic2, imu_topic;
+string log_dir_path, lidar_topic, lidar_topic2, imu_topic;
 
 double res_mean_last = 0.05, total_residual = 0.0;
 double last_timestamp_lidar = 0, last_timestamp_imu = -1.0;
@@ -95,7 +94,7 @@ double gyr_cov = 0.001, acc_cov = 0.1, b_gyr_cov = 0.0001, b_acc_cov = 0.0001;
 double filter_size_corner_min = 0, filter_size_surf_min = 0, filter_size_map_min = 0, fov_deg = 0;
 double cube_len = 0, HALF_FOV_COS = 0, FOV_DEG = 0, total_distance = 0, lidar_end_time = 0, first_lidar_time = 0.0;
 int    effect_feat_num = 0;
-int    iterCount = 0, feats_down_size = 0, NUM_MAX_ITERATIONS = 0, laserCloudValidNum = 0, pcd_save_interval = -1, pcd_index = 0;
+int    iterCount = 0, feats_down_size = 0, NUM_MAX_ITERATIONS = 0, laserCloudValidNum = 0, save_max_frame_num = 1000, pcd_index = 0;
 bool   point_selected_surf[100000] = {0};
 bool   lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false;
@@ -753,7 +752,6 @@ int main(int argc, char** argv)
     nh.param<bool>("publish/dense_publish_en",dense_pub_en, true);
     nh.param<bool>("publish/scan_bodyframe_pub_en",scan_body_pub_en, true);
     nh.param<int>("max_iteration",NUM_MAX_ITERATIONS,4);
-    nh.param<string>("map_file_path",map_file_path,"");
     nh.param<string>("common/lidar_topic",lidar_topic,"/livox/lidar");
     nh.param<string>("common/lidar_topic2",lidar_topic2,"/livox/lidar2");
     nh.param<string>("common/imu_topic", imu_topic,"/livox/imu");
@@ -777,7 +775,8 @@ int main(int argc, char** argv)
     nh.param<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
     nh.param<bool>("mapping/extrinsic_est_en", extrinsic_est_en, true);
     nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, false);
-    nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
+    nh.param<int>("pcd_save/max_frame_num", save_max_frame_num, 1000);
+    nh.param<string>("pcd_save/log_dir_path", log_dir_path,"/home/alpha/");
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
     nh.param<vector<double>>("mapping/lidar2base_T", lidar2baseT, vector<double>());
@@ -851,14 +850,14 @@ int main(int argc, char** argv)
 
     /*** debug record ***/
     // FILE *fp_state;
-    // string pos_log_dir = root_dir + "/Log/pos_log.txt";
-    // fp_state = fopen(pos_log_dir.c_str(),"w");
+    // string log_path = log_dir_path + "log/pos_log_" + std::to_string(static_cast<int>(omp_get_wtime())) + ".txt";
+    // fp_state = fopen(log_path.c_str(),"w");
     // if (fp_state == NULL)
-    //   ROS_ERROR("/Log/pos_log.txt doesn't exist");
+    //   ROS_ERROR("log_path doesn't exist");
 
     /*** ROS subscribe initialization ***/
     
-    // ros::Subscriber sub_pcl = p_pre->lidar_type < 3 ? nh.subscribe(lidar_topic, 10, livox_pcl_cbk) : nh.subscribe(lidar_topic, 10, standard_pcl_cbk);
+    // ros::Subscriber sub_pcl = p_pre->lidar_type < 3 ? nh.subscribe(lidar_topic, 100, livox_pcl_cbk) : nh.subscribe(lidar_topic, 100, standard_pcl_cbk);
 
     message_filters::Subscriber<livox_ros_driver2::CustomMsg> lidar_sub1(nh, lidar_topic, 10);
     message_filters::Subscriber<livox_ros_driver2::CustomMsg> lidar_sub2(nh, lidar_topic2, 10);
@@ -868,17 +867,19 @@ int main(int argc, char** argv)
 
     ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200, imu_cbk);
     ros::Publisher pubLaserCloudFull = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_registered", 10);
-    ros::Publisher pubLaserCloudFull_body = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_registered_body", 10);
-    ros::Publisher pubLaserCloudEffect = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_effected", 10);
-    ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>
-            ("/Laser_map", 10);
+            ("/cloud_registered", 100);
+    // ros::Publisher pubLaserCloudFull_body = nh.advertise<sensor_msgs::PointCloud2>
+    //         ("/cloud_registered_body", 100);
+    // ros::Publisher pubLaserCloudEffect = nh.advertise<sensor_msgs::PointCloud2>
+    //         ("/cloud_effected", 100);
+    // ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>
+    //         ("/Laser_map", 100);
     ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry> 
-            ("/Odometry", 10);
+            ("/Odometry", 100);
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
-            ("/path", 10);
+            ("/path", 100);
+
+
 //------------------------------------------------------------------------------------------------------
     signal(SIGINT, SigHandle);
     ros::Rate rate(5000);
@@ -1061,14 +1062,14 @@ int main(int argc, char** argv)
     scan_num = pcl_wait_save.size();
     if (pcd_save_en && scan_num > 0)
     {
-      string map_path = root_dir + "PCD/scans.pcd";
+      string map_path = log_dir_path + "PCD/map_" + std::to_string(static_cast<int>(omp_get_wtime())) + ".pcd";
       cout << "Map saved in " << map_path << endl; 
       PointCloudXYZI::Ptr pointcloud_map(new PointCloudXYZI());
       PointCloudXYZI::Ptr pointcloud_map_ds(new PointCloudXYZI());
       int map_point_num = 0;
       int skip_num = 1;
-      if (scan_num > 600)
-        skip_num = scan_num / 600;
+      if (scan_num > save_max_frame_num)
+        skip_num = scan_num / save_max_frame_num;
       for (int i=0; i<scan_num; i+=skip_num) {
         map_point_num += pcl_wait_save[i]->points.size();
         *pointcloud_map += *pcl_wait_save[i];
@@ -1083,10 +1084,10 @@ int main(int argc, char** argv)
     // if (runtime_pos_log)
     // {
     //   FILE *fp2;
-    //   string log_path = root_dir + "/Log/fastlio_time_log.csv";
+    //   string log_path = log_dir_path + "log/fastlio_time_log_" + std::to_string(static_cast<int>(omp_get_wtime())) + ".csv";
     //   fp2 = fopen(log_path.c_str(),"w");
     //   if (fp2 == NULL) {
-    //     ROS_ERROR("/Log/fastlio_time_log.csv doesn't exist");
+    //     ROS_ERROR("log/fastlio_time_log.csv doesn't exist");
     //   }
     //   fprintf(fp2, "lidar time, scan point num, downsample scan point num, ikd-tree point num, ikd-tree effect point num, match point num, add point num, delete point num, residual, total time, preprocessing time, ESKF time, map increment time, publish time \r\n");
     //   for (int i = 0;i<frame_num; i++){

@@ -1,6 +1,6 @@
 ### 1. Contributions
 
-1. 在原版Fast-LIO的基础上，增加了双Lidar的同步处理功能，可以支持同时处理两个Lidar的输入点云
+1. 在[FAST_LIO](https://github.com/hku-mars/FAST_LIO.git)的基础上，增加了双Lidar的同步处理功能，可以支持同时处理两个Lidar的输入点云
 
 ### 2. Acknowledgments
 

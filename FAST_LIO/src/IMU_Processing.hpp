@@ -390,7 +390,6 @@ void ImuProcess::Process(const MeasureGroup &meas,  esekfom::esekf<state_ikfom, 
                 << "cov of ba: " << cov_bias_acc.transpose() << endl
                 << "cov of gyr: " << cov_gyr.transpose() << endl
                 << "cov of acc: " << cov_acc.transpose() << endl << endl;
-      // fout_imu.open(DEBUG_FILE_DIR("imu.txt"),ios::out);
     }
 
     return;
