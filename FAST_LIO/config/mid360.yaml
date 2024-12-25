@@ -20,8 +20,8 @@ mapping:
   extrinsic_R: [1, 0, 0,  # 从LiDAR坐标系旋转到IMU坐标系的旋转矩阵
                 0, 1, 0,
                 0, 0, 1]
-  lidar2base_T: [0, 0, 0.205] # LiDAR在base系中的三维坐标
-  lidar2base_R: [1,  0,  0,  # 从LiDAR坐标系旋转到base坐标系的旋转矩阵
+  base2lidar_T: [0, 0, 0.205] # LiDAR在base系中的三维坐标
+  imu2base_R: [1,  0,  0,  # 从IMU旋转到base坐标系的旋转矩阵
                  0,  -1,  0,
                  0,  0,  -1]
 

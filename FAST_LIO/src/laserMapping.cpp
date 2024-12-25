@@ -102,8 +102,8 @@ vector<BoxPointType> cub_needrm;
 vector<PointVector>  Nearest_Points; 
 vector<double>       extrinT(3, 0.0);
 vector<double>       extrinR(9, 0.0);
-vector<double>       lidar2baseT(3, 0.0);
-vector<double>       lidar2baseR(9, 0.0);
+vector<double>       base2lidarT(3, 0.0);
+vector<double>       IMU2baseR(9, 0.0);
 deque<double>                     time_buffer;
 deque<PointCloudXYZI::Ptr>        lidar_buffer;
 deque<sensor_msgs::Imu::ConstPtr> imu_buffer;
@@ -125,22 +125,22 @@ KD_TREE<PointType> ikdtree;
 V3F XAxisPoint_body(LIDAR_SP_LEN, 0.0, 0.0);
 V3F XAxisPoint_world(LIDAR_SP_LEN, 0.0, 0.0);
 V3D position_last(Zero3d);
-V3D Lidar_T_wrt_IMU(Zero3d);
-M3D Lidar_R_wrt_IMU(Eye3d);
-V3D IMU_T_wrt_base(Zero3d);
-M3D IMU_R_wrt_base(Eye3d);
-vect3 base_T_wrt_IMU(Zero3d);
-M3D base_R_wrt_IMU(Eye3d);
-V3D Lidar_T_wrt_base(Zero3d);
+V3D Lidar_T_wrt_IMU(Zero3d);  // Lidar在IMU坐标系中的位置
+M3D Lidar_R_wrt_IMU(Eye3d);  // 从Lidar旋转到IMU坐标系的旋转矩阵
+V3D IMU_T_wrt_base(Zero3d); // IMU在base坐标系中的位置
+M3D IMU_R_wrt_base(Eye3d); // 从IMU旋转到base坐标系的旋转矩阵
+vect3 base_T_wrt_IMU(Zero3d); // base在IMU坐标系中的位置
+M3D base_R_wrt_IMU(Eye3d);  // 从base旋转到IMU坐标系的旋转矩阵
+V3D Lidar_T_wrt_base(Zero3d);  // Lidar在base坐标系中的位置
 
 /*** EKF inputs and output ***/
 MeasureGroup Measures;
 esekfom::esekf<state_ikfom, 12, input_ikfom> kf;
 state_ikfom state_point;
 vect3 pos_lidar;
-V3D pos_imu_in_base;
+V3D pos_imu_in_base;  // 当前IMU在初始base坐标系（全局坐标系）的位置
 V3D pos_base, vel_base;
-M3D rot_imu_wrt_base;
+M3D rot_imu_wrt_base;  // 当前IMU相对于初始base坐标系（全局坐标系）的旋转矩阵
 M3D rot_base;
 tf::Transform tf_uav_origin;
 
@@ -483,10 +483,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
   static int  frame_save_cnt = 0;
   if (pcd_save_en)
   {
-    frame_save_cnt++;
-    if (frame_save_cnt % 10 == 1) {
-      pcl_wait_save.emplace_back(laserCloudWorld);
-    }
+    pcl_wait_save.emplace_back(laserCloudWorld);
   }
 }
 
@@ -760,8 +757,8 @@ int main(int argc, char** argv)
     nh.param<string>("pcd_save/log_dir_path", log_dir_path,"/home/alpha/");
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
-    nh.param<vector<double>>("mapping/lidar2base_T", lidar2baseT, vector<double>());
-    nh.param<vector<double>>("mapping/lidar2base_R", lidar2baseR, vector<double>());
+    nh.param<vector<double>>("mapping/base2lidar_T", base2lidarT, vector<double>());
+    nh.param<vector<double>>("mapping/imu2base_R", IMU2baseR, vector<double>());
     
     std::cout <<endl<<endl<<endl<< "Lidar type is ";
     switch (p_pre->lidar_type) {
@@ -810,14 +807,14 @@ int main(int argc, char** argv)
 
     Lidar_T_wrt_IMU<<VEC_FROM_ARRAY(extrinT);
     Lidar_R_wrt_IMU<<MAT_FROM_ARRAY(extrinR);
-    Lidar_T_wrt_base<<VEC_FROM_ARRAY(lidar2baseT);
-    IMU_R_wrt_base<<MAT_FROM_ARRAY(lidar2baseR);
+    Lidar_T_wrt_base<<VEC_FROM_ARRAY(base2lidarT);
+    IMU_R_wrt_base<<MAT_FROM_ARRAY(IMU2baseR);
     base_R_wrt_IMU = IMU_R_wrt_base.transpose();
     IMU_T_wrt_base = Lidar_T_wrt_base - IMU_R_wrt_base * Lidar_T_wrt_IMU;
     base_T_wrt_IMU = Lidar_T_wrt_IMU - base_R_wrt_IMU * Lidar_T_wrt_base;
     
     std::cout << "Lidar pos in IMU: " << fixed << setprecision(3) << Lidar_T_wrt_IMU.transpose() << " m"<< endl << "Lidar2IMU R: " <<endl<< Lidar_R_wrt_IMU <<endl;
-    std::cout << "Lidar pos in base: " << Lidar_T_wrt_base.transpose() << " m"<< endl << "Lidar2base R: " <<endl<< IMU_R_wrt_base <<endl;
+    std::cout << "Lidar pos in base: " << Lidar_T_wrt_base.transpose() << " m"<< endl << "IMU2base R: " <<endl<< IMU_R_wrt_base <<endl;
 
     p_imu->set_extrinsic(Lidar_T_wrt_IMU, Lidar_R_wrt_IMU);
     p_imu->set_gyr_cov(V3D(gyr_cov, gyr_cov, gyr_cov));
@@ -1002,6 +999,7 @@ int main(int argc, char** argv)
 
         /******* Publish odometry *******/
         publish_odometry(pubOdomAftMapped);
+        if (path_en)                         publish_path(pubPath);
 
         /*** add the feature points to map kdtree ***/
         // t2 = omp_get_wtime();
@@ -1009,8 +1007,6 @@ int main(int argc, char** argv)
         // t3 = omp_get_wtime();
         
         /******* Publish points *******/
-        if (path_en)                         publish_path(pubPath);
-        if (scan_pub_en || pcd_save_en)      publish_frame_world(pubLaserCloudFull);
         // if (scan_pub_en && scan_body_pub_en) publish_frame_body(pubLaserCloudFull_body);
         // publish_effect_world(pubLaserCloudEffect);
         // publish_map(pubLaserCloudMap);
@@ -1042,6 +1038,8 @@ int main(int argc, char** argv)
           // dump_lio_state_to_log(fp_state);
           if (frame_num % 10 == 1)
           {
+            if (scan_pub_en || pcd_save_en)      publish_frame_world(pubLaserCloudFull);
+
             cout << "Lidar time: " << lidar_end_time-first_lidar_time << "s, cost time: " << aver_time_consu << " ms" << endl;
             cout << "pos: " << pos_base(0) << ", " << pos_base(1) << ", " << pos_base(2) << " m, q: " << geoQuat.x << ", " << geoQuat.y << ", " << geoQuat.z << ", " << geoQuat.w << endl;
           //   // cout << "IMU compensate: " << (t1-t0)*1e3 << ", " 
