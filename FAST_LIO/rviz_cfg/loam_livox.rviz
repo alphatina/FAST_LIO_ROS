@@ -44,10 +44,10 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.3
-      Cell Size: 0.2
+      Cell Size: 1
       Class: rviz/Grid
       Color: 160; 160; 164
-      Enabled: false
+      Enabled: true
       Line Style:
         Line Width: 1
         Value: Lines
@@ -232,19 +232,19 @@ Visualization Manager:
     - Alpha: 0
       Buffer Length: 2
       Class: rviz/Path
-      Color: 245; 120; 0
+      Color: 225; 0; 0
       Enabled: true
       Head Diameter: 0
       Head Length: 0
       Length: 0.3
       Line Style: Billboards
-      Line Width: 0.2
+      Line Width: 0.25
       Name: Path
       Offset:
         X: 0
         Y: 0
         Z: 0
-      Pose Color: 245; 120; 0
+      Pose Color: 225; 0; 0
       Pose Style: None
       Radius: 0.03
       Shaft Diameter: 0.4
@@ -278,34 +278,6 @@ Visualization Manager:
       Size (m): 0.3
       Style: Spheres
       Topic: /cloud_effected
-      Unreliable: false
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: false
-    - Alpha: 1
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: 13.139549255371094
-        Min Value: -32.08251953125
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz/PointCloud2
-      Color: 138; 226; 52
-      Color Transformer: FlatColor
-      Decay Time: 0
-      Enabled: false
-      Invert Rainbow: false
-      Max Color: 138; 226; 52
-      Min Color: 138; 226; 52
-      Name: PointCloud2
-      Position Transformer: XYZ
-      Queue Size: 10
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.1
-      Style: Flat Squares
-      Topic: /Laser_map
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
